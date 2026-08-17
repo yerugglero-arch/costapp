@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="记账">
+  <meta name="theme-color" content="#ffffff">
+  <title>记账</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icon-192.jpg">
+  <link rel="icon" href="icon-192.jpg">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="safe-area-top"></div>
+
+  <!-- 首页 -->
+  <section class="page page-home active" id="page-home">
+    <header class="page-header">
+      <h1>本月概览</h1>
+    </header>
+
+    <div class="balance-card">
+      <div class="balance-label">存款余额</div>
+      <div class="balance-amount" id="total-balance">¥0.00</div>
+      <div class="balance-hint">累计收入 − 累计支出</div>
+    </div>
+
+    <div class="stats-row">
+      <div class="stat-card stat-income">
+        <div class="stat-label">本月收入</div>
+        <div class="stat-amount" id="month-income">¥0.00</div>
+      </div>
+      <div class="stat-card stat-expense">
+        <div class="stat-label">本月支出</div>
+        <div class="stat-amount" id="month-expense">¥0.00</div>
+      </div>
+    </div>
+
+    <div class="stat-card stat-surplus">
+      <div class="stat-label">本月结余</div>
+      <div class="stat-amount" id="month-surplus">¥0.00</div>
+    </div>
+
+    <div class="section">
+      <div class="section-header">
+        <h2>最近记录</h2>
+        <button class="link-btn" id="view-all-btn">查看全部</button>
+      </div>
+      <div class="record-list" id="recent-records"></div>
+      <div class="empty-state" id="home-empty" hidden>
+        <div class="empty-icon">📝</div>
+        <div class="empty-text">还没有记录</div>
+        <div class="empty-hint">点击下方 + 记一笔</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 记录页 -->
+  <section class="page page-records" id="page-records">
+    <header class="page-header">
+      <h1>记录</h1>
+    </header>
+    <div class="filter-row">
+      <button class="filter-btn active" data-filter="all">全部</button>
+      <button class="filter-btn" data-filter="month">本月</button>
+      <button class="filter-btn" data-filter="week">本周</button>
+    </div>
+    <div class="record-list-grouped" id="all-records"></div>
+    <div class="empty-state" id="records-empty" hidden>
+      <div class="empty-icon">📭</div>
+      <div class="empty-text">暂无记录</div>
+    </div>
+  </section>
+
+  <!-- 统计页 -->
+  <section class="page page-stats" id="page-stats">
+    <header class="page-header">
+      <h1>统计</h1>
+    </header>
+    <div class="month-picker">
+      <button class="month-nav" id="prev-month" aria-label="上个月">‹</button>
+      <span class="month-label" id="stats-month-label"></span>
+      <button class="month-nav" id="next-month" aria-label="下个月">›</button>
+    </div>
+    <div class="calendar-card">
+      <div class="calendar-weekdays">
+        <span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span>
+      </div>
+      <div class="calendar-grid" id="calendar-grid"></div>
+      <div class="calendar-legend">
+        <span><i class="dot income"></i>收入</span>
+        <span><i class="dot expense"></i>支出</span>
+      </div>
+    </div>
+    <div class="stat-summary">
+      <div class="summary-item">
+        <div class="summary-label">收入</div>
+        <div class="summary-amount income-color" id="stats-income">¥0.00</div>
+      </div>
+      <div class="summary-item">
+        <div class="summary-label">支出</div>
+        <div class="summary-amount expense-color" id="stats-expense">¥0.00</div>
+      </div>
+      <div class="summary-item">
+        <div class="summary-label">结余</div>
+        <div class="summary-amount" id="stats-surplus">¥0.00</div>
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-header"><h2>支出分类</h2></div>
+      <div class="category-list" id="category-list"></div>
+      <div class="empty-state" id="stats-empty" hidden>
+        <div class="empty-icon">📊</div>
+        <div class="empty-text">本月暂无支出</div>
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-header"><h2>数据管理</h2></div>
+      <div class="settings-list">
+        <button class="settings-item" id="export-btn">导出数据</button>
+        <button class="settings-item" id="import-btn">导入数据</button>
+        <button class="settings-item danger" id="clear-btn">清空所有数据</button>
+      </div>
+      <input type="file" id="import-file" accept=".json" hidden>
+    </div>
+  </section>
+
+  <!-- 添加按钮 -->
+  <button class="fab" id="fab" aria-label="记一笔">
+    <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+  </button>
+
+  <!-- 记账弹窗 -->
+  <div class="modal" id="add-modal" aria-hidden="true">
+    <div class="modal-mask"></div>
+    <div class="modal-content">
+      <div class="modal-handle"></div>
+      <div class="modal-header">
+        <button class="modal-cancel" id="modal-cancel">取消</button>
+        <h3>记一笔</h3>
+        <button class="modal-save" id="modal-save">保存</button>
+      </div>
+      <div class="modal-body">
+        <div class="type-switch">
+          <button class="type-btn active" data-type="expense">支出</button>
+          <button class="type-btn" data-type="income">收入</button>
+        </div>
+        <div class="amount-input-wrap">
+          <span class="currency">¥</span>
+          <input type="number" id="amount-input" placeholder="0.00" inputmode="decimal" step="0.01" min="0">
+        </div>
+        <div class="category-grid" id="category-grid"></div>
+        <div class="form-row">
+          <label>日期</label>
+          <input type="date" id="date-input">
+        </div>
+        <div class="form-row">
+          <label>备注</label>
+          <input type="text" id="note-input" placeholder="可选" maxlength="50">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast 提示 -->
+  <div class="toast" id="toast"></div>
+
+  <!-- 底部Tab栏 -->
+  <nav class="tabbar">
+    <button class="tab-item active" data-page="home">
+      <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M12 3l9 8h-3v9h-12v-9h-3l9-8z"/></svg>
+      <span>首页</span>
+    </button>
+    <button class="tab-item" data-page="records">
+      <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-9 14H7v-2h3v2zm0-4H7v-2h3v2zm0-4H7V7h3v2zm7 8h-5v-2h5v2zm0-4h-5v-2h5v2zm0-4h-5V7h5v2z"/></svg>
+      <span>记录</span>
+    </button>
+    <button class="tab-item" data-page="stats">
+      <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M5 9.2h3V19H5V9.2zM10.6 5h2.8v14h-2.8V5zm5.4 8.2H19V19h-3v-5.8z"/></svg>
+      <span>统计</span>
+    </button>
+  </nav>
+
+  <div class="safe-area-bottom"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
