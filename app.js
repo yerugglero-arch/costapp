@@ -628,7 +628,7 @@ function bindEvents() {
   window.addEventListener('resize', hideActionMenu);
 
   // Tab 切换
-  $$('.tab-item').forEach(t => t.addEventListener('click', () => { hideActionMenu(); switchPage(t.dataset.page); })));
+  $$('.tab-item').forEach(t => t.addEventListener('click', () => { hideActionMenu(); switchPage(t.dataset.page); }));
   // 查看全部
   $('#view-all-btn').addEventListener('click', () => switchPage('records'));
   // FAB
