@@ -154,6 +154,49 @@ function formatDateShort(d) {
   return `${m}月${day}日`;
 }
 
+// ==================== 操作菜单（长按/右键弹出） ====================
+let actionMenuRecordId = null;
+function showActionMenu(recordId, anchorEl, x, y) {
+  const menu = $('#action-menu');
+  if (!menu) return;
+  actionMenuRecordId = recordId;
+
+  // 先显示一下获取尺寸，再定位
+  menu.classList.add('show');
+  menu.setAttribute('aria-hidden', 'false');
+  const rect = menu.getBoundingClientRect();
+  const vw = window.innerWidth, vh = window.innerHeight;
+
+  // 如果传入了锚点元素（长按），以其为基准定位；否则用 x,y（右键）
+  let left, top;
+  if (anchorEl) {
+    const r = anchorEl.getBoundingClientRect();
+    left = r.left + r.width / 2 - rect.width / 2;
+    top = r.top - rect.height - 8;
+    if (top < 8) top = r.bottom + 8; // 上方不够就翻到下方
+  } else {
+    left = x; top = y;
+  }
+  // 边界修正
+  left = Math.max(8, Math.min(left, vw - rect.width - 8));
+  top = Math.max(8, Math.min(top, vh - rect.height - 8));
+
+  menu.style.left = left + 'px';
+  menu.style.top = top + 'px';
+  // 重新触发动画
+  menu.classList.remove('show');
+  void menu.offsetWidth;
+  menu.classList.add('show');
+  menu.setAttribute('aria-hidden', 'false');
+}
+function hideActionMenu() {
+  const menu = $('#action-menu');
+  if (!menu) return;
+  menu.classList.remove('show');
+  menu.setAttribute('aria-hidden', 'true');
+  actionMenuRecordId = null;
+}
+
 function bindRecordItems(container) {
   container.querySelectorAll('.record-item').forEach(el => {
     // 点击编辑（区分长按，避免冲突）
@@ -162,46 +205,56 @@ function bindRecordItems(container) {
 
     el.addEventListener('click', () => {
       if (longPressed) { longPressed = false; return; }
-      clickTimer = setTimeout(() => editRecord(el.dataset.id), 250);
+      // 如果菜单已经打开，先关菜单不触发编辑
+      const menu = $('#action-menu');
+      if (menu && menu.classList.contains('show')) { hideActionMenu(); return; }
+      clickTimer = setTimeout(() => editRecord(el.dataset.id), 200);
     });
 
-    // 移动端长按删除
+    // 移动端长按 → 弹操作菜单
     el.addEventListener('touchstart', e => {
       longPressed = false;
       el._longTimer = setTimeout(() => {
         longPressed = true;
-        if (confirm('删除这条记录？')) deleteRecord(el.dataset.id);
-      }, 600);
+        if (navigator.vibrate) try { navigator.vibrate(15); } catch {}
+        showActionMenu(el.dataset.id, el);
+      }, 550);
     });
     el.addEventListener('touchend', () => clearTimeout(el._longTimer));
     el.addEventListener('touchmove', () => clearTimeout(el._longTimer));
 
-    // 桌面端鼠标长按删除
+    // 桌面端鼠标长按 → 弹操作菜单
     el.addEventListener('mousedown', e => {
       if (e.button !== 0) return;
       longPressed = false;
       el._mouseTimer = setTimeout(() => {
         longPressed = true;
-        if (confirm('删除这条记录？')) deleteRecord(el.dataset.id);
-      }, 600);
+        showActionMenu(el.dataset.id, el);
+      }, 550);
     });
     el.addEventListener('mouseup', () => clearTimeout(el._mouseTimer));
     el.addEventListener('mouseleave', () => clearTimeout(el._mouseTimer));
 
-    // 桌面端右键删除
+    // 桌面端右键 → 弹操作菜单（防原生菜单）
     el.addEventListener('contextmenu', e => {
       e.preventDefault();
-      if (confirm('删除这条记录？')) deleteRecord(el.dataset.id);
+      longPressed = true;
+      showActionMenu(el.dataset.id, null, e.clientX, e.clientY);
     });
   });
 }
 
 function editRecord(id) {
   const r = getRecords().find(x => x.id === id);
-  if (!r) return;
+  if (!r) { toast('记录不存在或已删除'); return; }
   state.editingId = id;
   state.selectedType = r.type;
-  state.selectedCategory = r.category;
+  // 防御性修复：如果分类 id 不在 CAT_MAP（旧数据），回退到"其他"
+  if (!CAT_MAP[r.category]) {
+    state.selectedCategory = r.type === 'income' ? 'other_i' : 'other_e';
+  } else {
+    state.selectedCategory = r.category;
+  }
   $('#amount-input').value = r.amount;
   $('#date-input').value = r.date;
   $('#note-input').value = r.note || '';
@@ -239,6 +292,22 @@ function renderRecords() {
 
   const groups = {};
   filtered.forEach(r => { (groups[r.date] = groups[r.date] || []).push(r); });
+
+  // 同步 filter 按钮高亮（含 custom 场景）
+  $$('.filter-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.filter === state.recordsFilter);
+  });
+  // 当前筛选提示
+  const info = $('#filter-info');
+  if (info) {
+    if (state.recordsFilter === 'custom' && state.recordsFilterDate) {
+      const dt = new Date(state.recordsFilterDate);
+      info.textContent = `当前筛选：${dt.getFullYear()}年${dt.getMonth() + 1}月${dt.getDate()}日（共 ${filtered.length} 条）· 点"全部"清除`;
+      info.hidden = false;
+    } else {
+      info.hidden = true;
+    }
+  }
 
   const container = $('#all-records');
   $('#records-empty').hidden = filtered.length > 0;
@@ -282,12 +351,14 @@ function renderCalendar() {
 
   const firstDay = new Date(year, month - 1, 1);
   const daysInMonth = new Date(year, month, 0).getDate();
-  const firstWeekday = firstDay.getDay(); // 0=周日
+  const firstWeekday = firstDay.getDay(); // 0=周日...6=周六
+  // 按周一为第一列：周一=0, 周二=1, ... 周日=6  →  前置空格 = (firstWeekday + 6) % 7
+  const leadingBlanks = (firstWeekday + 6) % 7;
   const daysInPrevMonth = new Date(year, month - 1, 0).getDate();
 
   const cells = [];
   // 前置：上月末尾
-  for (let i = firstWeekday - 1; i >= 0; i--) {
+  for (let i = leadingBlanks - 1; i >= 0; i--) {
     const day = daysInPrevMonth - i;
     const dateStr = (month === 1 ? year - 1 : year) + '-' + String(month === 1 ? 12 : month - 1).padStart(2, '0') + '-' + String(day).padStart(2, '0');
     cells.push({ day, dateStr, out: true });
@@ -415,7 +486,7 @@ function closeModal() {
 function saveRecord() {
   const amount = parseFloat($('#amount-input').value);
   if (!amount || amount <= 0) { toast('请输入金额'); return; }
-  if (!state.selectedCategory) { toast('请选择分类'); return; }
+  if (!state.selectedCategory || !CAT_MAP[state.selectedCategory]) { toast('请选择分类'); return; }
   const date = $('#date-input').value || todayStr();
   const note = $('#note-input').value.trim();
   const records = getRecords();
@@ -511,14 +582,57 @@ function importData(file) {
 function clearAllData() {
   if (!confirm('确定清空所有记账数据？此操作不可恢复')) return;
   localStorage.removeItem(STORAGE_KEY);
+  localStorage.removeItem(STATE_KEY);
+  localStorage.removeItem(SEED_KEY); // 允许重新填充种子数据
+  state = {
+    selectedType: 'expense',
+    selectedCategory: CATEGORIES.expense[0].id,
+    editingId: null,
+    recordsFilter: 'all',
+    recordsFilterDate: null,
+    statsMonth: null
+  };
+  const d = new Date();
+  state.statsMonth = { year: d.getFullYear(), month: d.getMonth() + 1 };
+  // 清除期初，使下次打开或导入时按规则重新校准
+  localStorage.removeItem(OPENING_BALANCE_KEY);
+  initOpeningBalanceIfNeeded();
   renderAll();
-  toast('已清空');
+  toast('已清空所有数据');
 }
 
 // ==================== 事件绑定 ====================
 function bindEvents() {
+  // 操作菜单按钮
+  const menu = $('#action-menu');
+  if (menu) {
+    menu.querySelectorAll('.action-item').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const id = actionMenuRecordId;
+        const action = btn.dataset.action;
+        hideActionMenu();
+        if (!id) return;
+        if (action === 'edit') editRecord(id);
+        else if (action === 'delete') {
+          setTimeout(() => {
+            if (confirm('删除这条记录？')) deleteRecord(id);
+          }, 50);
+        }
+      });
+    });
+  }
+  // 点击空白 / 滚动 / 切换页面 → 关闭菜单
+  document.addEventListener('click', e => {
+    const m = $('#action-menu');
+    if (!m || !m.classList.contains('show')) return;
+    if (e.target.closest('#action-menu') || e.target.closest('.record-item')) return;
+    hideActionMenu();
+  }, true);
+  window.addEventListener('scroll', hideActionMenu, true);
+  window.addEventListener('resize', hideActionMenu);
+
   // Tab 切换
-  $$('.tab-item').forEach(t => t.addEventListener('click', () => switchPage(t.dataset.page)));
+  $$('.tab-item').forEach(t => t.addEventListener('click', () => { hideActionMenu(); switchPage(t.dataset.page); })));
   // 查看全部
   $('#view-all-btn').addEventListener('click', () => switchPage('records'));
   // FAB
@@ -540,6 +654,14 @@ function bindEvents() {
       }
     });
   }
+  // ESC 键关闭弹窗 / 操作菜单
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    const modal = $('#add-modal');
+    if (modal && modal.classList.contains('active')) { closeModal(); return; }
+    const m = $('#action-menu');
+    if (m && m.classList.contains('show')) hideActionMenu();
+  });
   // 类型切换
   $$('.type-btn').forEach(b => b.addEventListener('click', () => {
     state.selectedType = b.dataset.type;
@@ -615,11 +737,11 @@ function bindEvents() {
               const dateStr = `${new Date().getFullYear()}-${m}-${day}`;
               if (+d.income > 0) incomingRecords.push({
                 id: uid(), date: dateStr, type: 'income',
-                amount: +d.income, category: 'income_other', note: ''
+                amount: +d.income, category: 'other_i', note: ''
               });
               if (+d.expense > 0) incomingRecords.push({
                 id: uid(), date: dateStr, type: 'expense',
-                amount: +d.expense, category: 'expense_other', note: ''
+                amount: +d.expense, category: 'other_e', note: ''
               });
             });
           });

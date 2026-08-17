@@ -81,6 +81,7 @@
       <button class="filter-btn" data-filter="month">本月</button>
       <button class="filter-btn" data-filter="week">本周</button>
     </div>
+    <div class="filter-info" id="filter-info" hidden></div>
     <div class="record-list-grouped" id="all-records"></div>
     <div class="empty-state" id="records-empty" hidden>
       <div class="empty-icon">📭</div>
@@ -100,7 +101,7 @@
     </div>
     <div class="calendar-card">
       <div class="calendar-weekdays">
-        <span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span>
+        <span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span>
       </div>
       <div class="calendar-grid" id="calendar-grid"></div>
       <div class="calendar-legend">
@@ -179,6 +180,16 @@
         </div>
       </div>
     </div>
+  </div>
+
+  <!-- 操作菜单（长按/右键弹出） -->
+  <div class="action-menu" id="action-menu" aria-hidden="true">
+    <button class="action-item" data-action="edit">
+      <span class="action-emoji">✏️</span><span>编辑</span>
+    </button>
+    <button class="action-item danger" data-action="delete">
+      <span class="action-emoji">🗑️</span><span>删除</span>
+    </button>
   </div>
 
   <!-- Toast 提示 -->
