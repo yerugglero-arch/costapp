@@ -55,14 +55,10 @@ function getOpeningBalance() {
   return isNaN(v) ? 0 : v;
 }
 function setOpeningBalance(v) { localStorage.setItem(OPENING_BALANCE_KEY, String(v)); }
-// 期初余额默认值：使"期初 + 净收支"= 7647.05（仅当未设置过时初始化）
+// 期初余额默认 0（用户自行通过账单调整）
 function initOpeningBalanceIfNeeded() {
   if (localStorage.getItem(OPENING_BALANCE_KEY) === null) {
-    // 当前净收支 = 总收入 - 总支出
-    const records = getRecords();
-    const net = records.reduce((s, r) => s + (r.type === 'income' ? +r.amount : -r.amount), 0);
-    // 期望余额 7647.05 - 净收支 = 期初
-    setOpeningBalance(Math.round((7647.05 - net) * 100) / 100);
+    setOpeningBalance(0);
   }
 }
 function loadState() {
@@ -745,9 +741,8 @@ function bindEvents() {
               });
             });
           });
-          // 种子导入时把余额校准到期望 7647.05
-          const net = incomingRecords.reduce((s, r) => s + (r.type === 'income' ? +r.amount : -r.amount), 0);
-          incomingOpening = Math.round((7647.05 - net) * 100) / 100;
+          // 种子导入时期初默认 0，用户自行调整
+          incomingOpening = 0;
         } else throw new Error('不认识的格式');
         if (!incomingRecords.length) throw new Error('空数据');
 
