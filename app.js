@@ -157,13 +157,13 @@ function showActionMenu(recordId, anchorEl, x, y) {
   if (!menu) return;
   actionMenuRecordId = recordId;
 
-  // 先显示一下获取尺寸，再定位
-  menu.classList.add('show');
-  menu.setAttribute('aria-hidden', 'false');
+  // 取尺寸时菜单已在视口外（-9999px），opacity=0 但 display:block，所以能正常测尺寸，
+  // 并且不会在屏幕中间出现闪烁。
+  menu.classList.remove('show');
+  menu.setAttribute('aria-hidden', 'true');
   const rect = menu.getBoundingClientRect();
   const vw = window.innerWidth, vh = window.innerHeight;
 
-  // 如果传入了锚点元素（长按），以其为基准定位；否则用 x,y（右键）
   let left, top;
   if (anchorEl) {
     const r = anchorEl.getBoundingClientRect();
@@ -173,14 +173,12 @@ function showActionMenu(recordId, anchorEl, x, y) {
   } else {
     left = x; top = y;
   }
-  // 边界修正
   left = Math.max(8, Math.min(left, vw - rect.width - 8));
   top = Math.max(8, Math.min(top, vh - rect.height - 8));
 
   menu.style.left = left + 'px';
   menu.style.top = top + 'px';
-  // 重新触发动画
-  menu.classList.remove('show');
+  // 重新触发显示动画
   void menu.offsetWidth;
   menu.classList.add('show');
   menu.setAttribute('aria-hidden', 'false');
@@ -190,6 +188,8 @@ function hideActionMenu() {
   if (!menu) return;
   menu.classList.remove('show');
   menu.setAttribute('aria-hidden', 'true');
+  menu.style.left = '-9999px';
+  menu.style.top = '-9999px';
   actionMenuRecordId = null;
 }
 
@@ -502,6 +502,35 @@ function saveRecord() {
   renderAll();
 }
 
+// ==================== 期初余额弹窗 ====================
+function openBalanceModal() {
+  const input = $('#balance-input');
+  if (input) input.value = formatNumber(getOpeningBalance());
+  const m = $('#balance-modal');
+  if (m) {
+    m.classList.add('active');
+    m.setAttribute('aria-hidden', 'false');
+  }
+  setTimeout(() => {
+    if (input) { input.focus(); input.select(); }
+  }, 320);
+}
+function closeBalanceModal() {
+  const m = $('#balance-modal');
+  if (m) {
+    m.classList.remove('active');
+    m.setAttribute('aria-hidden', 'true');
+  }
+}
+function saveBalance() {
+  const v = parseFloat($('#balance-input').value);
+  if (isNaN(v)) { toast('请输入正确数字'); return; }
+  setOpeningBalance(Math.round(v * 100) / 100);
+  closeBalanceModal();
+  toast('期初余额已更新');
+  renderAll();
+}
+
 // ==================== Tab 切换 ====================
 function switchPage(page) {
   $$('.page').forEach(p => p.classList.remove('active'));
@@ -633,10 +662,29 @@ function bindEvents() {
   $('#view-all-btn').addEventListener('click', () => switchPage('records'));
   // FAB
   $('#fab').addEventListener('click', () => openModal());
+  // 余额卡 → 修改期初余额弹窗
+  const balanceCard = $('#balance-card');
+  if (balanceCard) {
+    balanceCard.addEventListener('click', openBalanceModal);
+    balanceCard.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openBalanceModal(); }
+    });
+  }
+  // 期初余额弹窗取消
+  const balanceCancel = $('#balance-cancel');
+  if (balanceCancel) balanceCancel.addEventListener('click', closeBalanceModal);
+  const balanceSave = $('#balance-save');
+  if (balanceSave) balanceSave.addEventListener('click', saveBalance);
   // 弹窗取消
   $('#modal-cancel').addEventListener('click', closeModal);
   $('#modal-save').addEventListener('click', saveRecord);
-  $$('.modal-mask').forEach(m => m.addEventListener('click', closeModal));
+  $$('.modal-mask').forEach(m => m.addEventListener('click', () => {
+    // 所有弹窗的 mask 点击都关当前弹窗
+    const addModal = $('#add-modal');
+    const balModal = $('#balance-modal');
+    if (addModal && addModal.classList.contains('active')) closeModal();
+    else if (balModal && balModal.classList.contains('active')) closeBalanceModal();
+  }));
   // 弹窗内删除按钮
   const modalDel = $('#modal-delete');
   if (modalDel) {
@@ -653,6 +701,8 @@ function bindEvents() {
   // ESC 键关闭弹窗 / 操作菜单
   document.addEventListener('keydown', e => {
     if (e.key !== 'Escape') return;
+    const balModal = $('#balance-modal');
+    if (balModal && balModal.classList.contains('active')) { closeBalanceModal(); return; }
     const modal = $('#add-modal');
     if (modal && modal.classList.contains('active')) { closeModal(); return; }
     const m = $('#action-menu');

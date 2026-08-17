@@ -23,10 +23,10 @@
       <h1>本月概览</h1>
     </header>
 
-    <div class="balance-card">
+    <div class="balance-card" id="balance-card" role="button" tabindex="0" aria-label="修改期初余额">
       <div class="balance-label">存款余额</div>
       <div class="balance-amount" id="total-balance">¥0.00</div>
-      <div class="balance-hint">累计收入 − 累计支出</div>
+      <div class="balance-hint">点击修改期初 · 累计收入 − 累计支出</div>
     </div>
 
     <div class="stats-row">
@@ -177,6 +177,26 @@
         </div>
         <div class="form-row" id="delete-row" style="display:none;">
           <button class="btn-danger-full" id="modal-delete">删除这条记录</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 修改期初余额弹窗 -->
+  <div class="modal" id="balance-modal" aria-hidden="true">
+    <div class="modal-mask"></div>
+    <div class="modal-content">
+      <div class="modal-handle"></div>
+      <div class="modal-header">
+        <button class="modal-cancel" id="balance-cancel">取消</button>
+        <h3>设置期初余额</h3>
+        <button class="modal-save" id="balance-save">保存</button>
+      </div>
+      <div class="modal-body">
+        <div class="empty-hint" style="margin-bottom:12px;">存款余额 = 期初余额 + 累计收入 − 累计支出<br>请按你的真实账单设置期初余额</div>
+        <div class="amount-input-wrap">
+          <span class="currency">¥</span>
+          <input type="number" id="balance-input" placeholder="0.00" inputmode="decimal" step="0.01">
         </div>
       </div>
     </div>
