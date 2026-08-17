@@ -743,17 +743,20 @@ function bindEvents() {
   // 金额回车保存
   $('#amount-input').addEventListener('keydown', e => { if (e.key === 'Enter') saveRecord(); });
 
-  // 首页余额 5 连点 → 切换快速导入面板（保护隐私，不常显示）
+  // 首页余额数字 5 连点 → 切换快速导入面板（保护隐私，不常显示）
   let tapCount = 0, tapTimer = null;
-  const balanceCard = document.querySelector('.balance-amount');
-  if (balanceCard) {
-    balanceCard.style.cursor = 'pointer';
-    balanceCard.addEventListener('click', () => {
+  const balanceText = document.querySelector('.balance-amount');
+  if (balanceText) {
+    balanceText.style.cursor = 'pointer';
+    balanceText.addEventListener('click', e => {
+      // 5 连点是在余额数字（小范围）上的快速点，不影响余额卡单次点击的"修改期初"弹窗
       tapCount++;
       clearTimeout(tapTimer);
       tapTimer = setTimeout(() => tapCount = 0, 1200);
       if (tapCount >= 5) {
         tapCount = 0;
+        // 阻止冒泡，避免触发余额卡的 click → 打开修改期初弹窗
+        e.stopPropagation();
         const box = $('#paste-import-box');
         if (box) box.style.display = (box.style.display === 'none') ? 'block' : 'none';
         toast(box.style.display === 'block' ? '已打开快速导入' : '已关闭快速导入');
