@@ -156,18 +156,43 @@ function formatDateShort(d) {
 
 function bindRecordItems(container) {
   container.querySelectorAll('.record-item').forEach(el => {
-    let timer;
+    // 点击编辑（区分长按，避免冲突）
+    let clickTimer = null;
+    let longPressed = false;
+
     el.addEventListener('click', () => {
-      timer = setTimeout(() => editRecord(el.dataset.id), 250);
+      if (longPressed) { longPressed = false; return; }
+      clickTimer = setTimeout(() => editRecord(el.dataset.id), 250);
     });
-    // 长按删除
-    el.addEventListener('touchstart', () => {
+
+    // 移动端长按删除
+    el.addEventListener('touchstart', e => {
+      longPressed = false;
       el._longTimer = setTimeout(() => {
+        longPressed = true;
         if (confirm('删除这条记录？')) deleteRecord(el.dataset.id);
       }, 600);
     });
     el.addEventListener('touchend', () => clearTimeout(el._longTimer));
     el.addEventListener('touchmove', () => clearTimeout(el._longTimer));
+
+    // 桌面端鼠标长按删除
+    el.addEventListener('mousedown', e => {
+      if (e.button !== 0) return;
+      longPressed = false;
+      el._mouseTimer = setTimeout(() => {
+        longPressed = true;
+        if (confirm('删除这条记录？')) deleteRecord(el.dataset.id);
+      }, 600);
+    });
+    el.addEventListener('mouseup', () => clearTimeout(el._mouseTimer));
+    el.addEventListener('mouseleave', () => clearTimeout(el._mouseTimer));
+
+    // 桌面端右键删除
+    el.addEventListener('contextmenu', e => {
+      e.preventDefault();
+      if (confirm('删除这条记录？')) deleteRecord(el.dataset.id);
+    });
   });
 }
 
@@ -181,7 +206,11 @@ function editRecord(id) {
   $('#date-input').value = r.date;
   $('#note-input').value = r.note || '';
   renderCategoryGrid();
-  openModal();
+  // 编辑模式：显示删除按钮 + 改标题
+  $('#modal-title').textContent = '编辑记录';
+  const delRow = $('#delete-row');
+  if (delRow) delRow.style.display = 'block';
+  openModal(true);
 }
 
 function deleteRecord(id) {
@@ -353,13 +382,17 @@ function renderStats() {
 function renderAll() { renderHome(); renderRecords(); renderStats(); }
 
 // ==================== 弹窗 ====================
-function openModal() {
-  if (!state.editingId) {
+function openModal(skipReset = false) {
+  if (!skipReset || !state.editingId) {
+    // 新增模式：重置表单并隐藏删除按钮
     $('#amount-input').value = '';
     $('#date-input').value = todayStr();
     $('#note-input').value = '';
     state.selectedType = 'expense';
     state.selectedCategory = CATEGORIES.expense[0].id;
+    $('#modal-title').textContent = '记一笔';
+    const delRow = $('#delete-row');
+    if (delRow) delRow.style.display = 'none';
   }
   renderCategoryGrid();
   $('#add-modal').classList.add('active');
@@ -371,6 +404,12 @@ function closeModal() {
   $('#add-modal').classList.remove('active');
   $('#add-modal').setAttribute('aria-hidden', 'true');
   state.editingId = null;
+  // 关闭后恢复默认（防止下次打开残留删除按钮）
+  setTimeout(() => {
+    $('#modal-title').textContent = '记一笔';
+    const delRow = $('#delete-row');
+    if (delRow) delRow.style.display = 'none';
+  }, 300);
 }
 
 function saveRecord() {
@@ -410,7 +449,13 @@ function switchPage(page) {
 function exportData() {
   const records = getRecords();
   if (records.length === 0) { toast('暂无数据可导出'); return; }
-  const blob = new Blob([JSON.stringify(records, null, 2)], { type: 'application/json' });
+  const payload = {
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    openingBalance: getOpeningBalance(),
+    records
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -425,17 +470,39 @@ function importData(file) {
   reader.onload = e => {
     try {
       const data = JSON.parse(e.target.result);
-      if (!Array.isArray(data)) throw new Error('格式错误');
+      let incomingRecords = [];
+      let incomingOpening = null;
+
+      if (Array.isArray(data)) {
+        // 旧版：纯 records 数组
+        incomingRecords = data;
+      } else if (data && Array.isArray(data.records)) {
+        // 新版：对象格式
+        incomingRecords = data.records;
+        if (typeof data.openingBalance === 'number' && !isNaN(data.openingBalance)) {
+          incomingOpening = data.openingBalance;
+        }
+      } else {
+        throw new Error('格式错误');
+      }
+
       const records = getRecords();
       const existing = new Set(records.map(r => r.id));
       let added = 0;
-      data.forEach(r => {
+      incomingRecords.forEach(r => {
         if (!r.id) r.id = uid();
         if (!existing.has(r.id)) { records.push(r); added++; }
       });
       saveRecords(records);
+
+      if (incomingOpening !== null) {
+        setOpeningBalance(incomingOpening);
+      }
+
       renderAll();
-      toast(`已导入 ${added} 条`);
+      let msg = `已导入 ${added} 条`;
+      if (incomingOpening !== null) msg += `，余额已同步`;
+      toast(msg);
     } catch (err) { toast('文件格式错误'); }
   };
   reader.readAsText(file);
@@ -455,11 +522,24 @@ function bindEvents() {
   // 查看全部
   $('#view-all-btn').addEventListener('click', () => switchPage('records'));
   // FAB
-  $('#fab').addEventListener('click', openModal);
+  $('#fab').addEventListener('click', () => openModal());
   // 弹窗取消
   $('#modal-cancel').addEventListener('click', closeModal);
   $('#modal-save').addEventListener('click', saveRecord);
   $$('.modal-mask').forEach(m => m.addEventListener('click', closeModal));
+  // 弹窗内删除按钮
+  const modalDel = $('#modal-delete');
+  if (modalDel) {
+    modalDel.addEventListener('click', () => {
+      if (!state.editingId) return;
+      if (confirm('删除这条记录？')) {
+        const id = state.editingId;
+        state.editingId = null;
+        deleteRecord(id);
+        closeModal();
+      }
+    });
+  }
   // 类型切换
   $$('.type-btn').forEach(b => b.addEventListener('click', () => {
     state.selectedType = b.dataset.type;
@@ -494,6 +574,73 @@ function bindEvents() {
   $('#clear-btn').addEventListener('click', clearAllData);
   // 金额回车保存
   $('#amount-input').addEventListener('keydown', e => { if (e.key === 'Enter') saveRecord(); });
+
+  // 首页余额 5 连点 → 切换快速导入面板（保护隐私，不常显示）
+  let tapCount = 0, tapTimer = null;
+  const balanceCard = document.querySelector('.balance-amount');
+  if (balanceCard) {
+    balanceCard.style.cursor = 'pointer';
+    balanceCard.addEventListener('click', () => {
+      tapCount++;
+      clearTimeout(tapTimer);
+      tapTimer = setTimeout(() => tapCount = 0, 1200);
+      if (tapCount >= 5) {
+        tapCount = 0;
+        const box = $('#paste-import-box');
+        if (box) box.style.display = (box.style.display === 'none') ? 'block' : 'none';
+        toast(box.style.display === 'block' ? '已打开快速导入' : '已关闭快速导入');
+      }
+    });
+  }
+  const pasteBtn = $('#paste-import-btn');
+  if (pasteBtn) {
+    pasteBtn.addEventListener('click', () => {
+      const txt = $('#paste-area').value.trim();
+      if (!txt) { toast('先粘贴数据'); return; }
+      try {
+        const raw = JSON.parse(txt);
+        let incomingRecords = [];
+        let incomingOpening = null;
+        if (Array.isArray(raw)) incomingRecords = raw;
+        else if (raw && Array.isArray(raw.records)) {
+          incomingRecords = raw.records;
+          if (typeof raw.openingBalance === 'number' && !isNaN(raw.openingBalance)) incomingOpening = raw.openingBalance;
+        } else if (raw && raw.data && Array.isArray(raw.data)) {
+          // records-data.json 种子文件：按日生成收入/支出两条
+          raw.data.forEach(monthBlock => {
+            const m = String(monthBlock.month).padStart(2, '0');
+            if (!Array.isArray(monthBlock.daily)) return;
+            monthBlock.daily.forEach(d => {
+              const day = String(d.day).padStart(2, '0');
+              const dateStr = `${new Date().getFullYear()}-${m}-${day}`;
+              if (+d.income > 0) incomingRecords.push({
+                id: uid(), date: dateStr, type: 'income',
+                amount: +d.income, category: 'income_other', note: ''
+              });
+              if (+d.expense > 0) incomingRecords.push({
+                id: uid(), date: dateStr, type: 'expense',
+                amount: +d.expense, category: 'expense_other', note: ''
+              });
+            });
+          });
+          // 种子导入时把余额校准到期望 7647.05
+          const net = incomingRecords.reduce((s, r) => s + (r.type === 'income' ? +r.amount : -r.amount), 0);
+          incomingOpening = Math.round((7647.05 - net) * 100) / 100;
+        } else throw new Error('不认识的格式');
+        if (!incomingRecords.length) throw new Error('空数据');
+
+        // 先清空再写入（避免重号）
+        saveRecords(incomingRecords);
+        if (incomingOpening !== null) setOpeningBalance(incomingOpening);
+        localStorage.removeItem(STATE_KEY); // 重置筛选状态
+        location.reload();
+      } catch (err) {
+        toast('格式错误：' + (err.message || '无法解析'));
+      }
+    });
+  }
+  const clearPaste = $('#paste-clear-btn');
+  if (clearPaste) clearPaste.addEventListener('click', () => { $('#paste-area').value = ''; });
   // 日历点击：选中日期 → 切到记录页看当日明细
   const calGrid = $('#calendar-grid');
   if (calGrid) {

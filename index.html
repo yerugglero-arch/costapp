@@ -57,6 +57,18 @@
         <div class="empty-hint">点击下方 + 记一笔</div>
       </div>
     </div>
+
+    <div class="section paste-import-box" id="paste-import-box" style="display:none;">
+      <div class="section-header">
+        <h2>快速导入数据</h2>
+      </div>
+      <div class="empty-hint" style="margin-bottom:8px;">把 records-data.json 里的全部文本粘贴到下面，点"导入"即可</div>
+      <textarea class="paste-area" id="paste-area" placeholder='[{"date":"2026-05-17","type":"income",...}]' rows="6"></textarea>
+      <div style="display:flex; gap:10px; margin-top:8px;">
+        <button class="btn-primary" id="paste-import-btn">导入</button>
+        <button class="btn-secondary" id="paste-clear-btn">清空</button>
+      </div>
+    </div>
   </section>
 
   <!-- 记录页 -->
@@ -141,7 +153,7 @@
       <div class="modal-handle"></div>
       <div class="modal-header">
         <button class="modal-cancel" id="modal-cancel">取消</button>
-        <h3>记一笔</h3>
+        <h3 id="modal-title">记一笔</h3>
         <button class="modal-save" id="modal-save">保存</button>
       </div>
       <div class="modal-body">
@@ -161,6 +173,9 @@
         <div class="form-row">
           <label>备注</label>
           <input type="text" id="note-input" placeholder="可选" maxlength="50">
+        </div>
+        <div class="form-row" id="delete-row" style="display:none;">
+          <button class="btn-danger-full" id="modal-delete">删除这条记录</button>
         </div>
       </div>
     </div>
