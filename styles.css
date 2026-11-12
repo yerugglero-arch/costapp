@@ -99,40 +99,6 @@ button:active, .record-item:active, .cal-cell:active,
   letter-spacing: -0.5px;
 }
 
-/* ==================== 余额卡 ==================== */
-.balance-card {
-  background: var(--card-bg);
-  border-radius: var(--radius-lg);
-  padding: 28px 20px 24px;
-  margin: 8px 0 20px;
-  text-align: center;
-  cursor: pointer;
-  transition: transform .15s ease, background-color .15s ease;
-}
-.balance-card:active {
-  transform: scale(0.985);
-  background: #f5f5f7;
-}
-.balance-label {
-  font-size: 12px;
-  color: var(--text-secondary);
-  margin-bottom: 10px;
-  letter-spacing: 0.5px;
-  text-transform: uppercase;
-}
-.balance-amount {
-  font-size: 42px;
-  font-weight: 600;
-  letter-spacing: -1px;
-  font-feature-settings: "tnum";
-  color: var(--text);
-}
-.balance-hint {
-  font-size: 11px;
-  color: var(--text-tertiary);
-  margin-top: 8px;
-}
-
 /* ==================== 统计卡 ==================== */
 .stats-row {
   display: grid;

@@ -26,7 +26,6 @@ const CAT_MAP = {};
 // 存储
 const STORAGE_KEY = 'costapp_records_v1';
 const STATE_KEY = 'costapp_state_v1';
-const OPENING_BALANCE_KEY = 'costapp_opening_balance_v1';
 
 let state = {
   selectedType: 'expense',
@@ -50,17 +49,6 @@ function getRecords() {
 }
 function saveRecords(arr) { localStorage.setItem(STORAGE_KEY, JSON.stringify(arr)); }
 function saveState() { localStorage.setItem(STATE_KEY, JSON.stringify(state)); }
-function getOpeningBalance() {
-  const v = parseFloat(localStorage.getItem(OPENING_BALANCE_KEY));
-  return isNaN(v) ? 0 : v;
-}
-function setOpeningBalance(v) { localStorage.setItem(OPENING_BALANCE_KEY, String(v)); }
-// 期初余额默认 0（用户自行通过账单调整）
-function initOpeningBalanceIfNeeded() {
-  if (localStorage.getItem(OPENING_BALANCE_KEY) === null) {
-    setOpeningBalance(0);
-  }
-}
 function loadState() {
   try {
     const s = JSON.parse(localStorage.getItem(STATE_KEY) || '{}');
@@ -106,17 +94,14 @@ function renderHome() {
   const now = new Date();
   const ym = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
 
-  let totalIncome = 0, totalExpense = 0, monthIncome = 0, monthExpense = 0;
+  let monthIncome = 0, monthExpense = 0;
   records.forEach(r => {
-    if (r.type === 'income') totalIncome += +r.amount;
-    else totalExpense += +r.amount;
     if (r.date.startsWith(ym)) {
       if (r.type === 'income') monthIncome += +r.amount;
       else monthExpense += +r.amount;
     }
   });
 
-  $('#total-balance').textContent = fmt(getOpeningBalance() + totalIncome - totalExpense);
   $('#month-income').textContent = fmt(monthIncome);
   $('#month-expense').textContent = fmt(monthExpense);
   $('#month-surplus').textContent = fmt(monthIncome - monthExpense);
@@ -502,35 +487,6 @@ function saveRecord() {
   renderAll();
 }
 
-// ==================== 期初余额弹窗 ====================
-function openBalanceModal() {
-  const input = $('#balance-input');
-  if (input) input.value = formatNumber(getOpeningBalance());
-  const m = $('#balance-modal');
-  if (m) {
-    m.classList.add('active');
-    m.setAttribute('aria-hidden', 'false');
-  }
-  setTimeout(() => {
-    if (input) { input.focus(); input.select(); }
-  }, 320);
-}
-function closeBalanceModal() {
-  const m = $('#balance-modal');
-  if (m) {
-    m.classList.remove('active');
-    m.setAttribute('aria-hidden', 'true');
-  }
-}
-function saveBalance() {
-  const v = parseFloat($('#balance-input').value);
-  if (isNaN(v)) { toast('请输入正确数字'); return; }
-  setOpeningBalance(Math.round(v * 100) / 100);
-  closeBalanceModal();
-  toast('期初余额已更新');
-  renderAll();
-}
-
 // ==================== Tab 切换 ====================
 function switchPage(page) {
   $$('.page').forEach(p => p.classList.remove('active'));
@@ -548,7 +504,6 @@ function exportData() {
   const payload = {
     version: 1,
     exportedAt: new Date().toISOString(),
-    openingBalance: getOpeningBalance(),
     records
   };
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
@@ -567,17 +522,11 @@ function importData(file) {
     try {
       const data = JSON.parse(e.target.result);
       let incomingRecords = [];
-      let incomingOpening = null;
 
       if (Array.isArray(data)) {
-        // 旧版：纯 records 数组
         incomingRecords = data;
       } else if (data && Array.isArray(data.records)) {
-        // 新版：对象格式
         incomingRecords = data.records;
-        if (typeof data.openingBalance === 'number' && !isNaN(data.openingBalance)) {
-          incomingOpening = data.openingBalance;
-        }
       } else {
         throw new Error('格式错误');
       }
@@ -590,15 +539,8 @@ function importData(file) {
         if (!existing.has(r.id)) { records.push(r); added++; }
       });
       saveRecords(records);
-
-      if (incomingOpening !== null) {
-        setOpeningBalance(incomingOpening);
-      }
-
       renderAll();
-      let msg = `已导入 ${added} 条`;
-      if (incomingOpening !== null) msg += `，余额已同步`;
-      toast(msg);
+      toast(`已导入 ${added} 条`);
     } catch (err) { toast('文件格式错误'); }
   };
   reader.readAsText(file);
@@ -619,9 +561,6 @@ function clearAllData() {
   };
   const d = new Date();
   state.statsMonth = { year: d.getFullYear(), month: d.getMonth() + 1 };
-  // 清除期初，使下次打开或导入时按规则重新校准
-  localStorage.removeItem(OPENING_BALANCE_KEY);
-  initOpeningBalanceIfNeeded();
   renderAll();
   toast('已清空所有数据');
 }
@@ -662,29 +601,10 @@ function bindEvents() {
   $('#view-all-btn').addEventListener('click', () => switchPage('records'));
   // FAB
   $('#fab').addEventListener('click', () => openModal());
-  // 余额卡 → 修改期初余额弹窗
-  const balanceCard = $('#balance-card');
-  if (balanceCard) {
-    balanceCard.addEventListener('click', openBalanceModal);
-    balanceCard.addEventListener('keydown', e => {
-      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openBalanceModal(); }
-    });
-  }
-  // 期初余额弹窗取消
-  const balanceCancel = $('#balance-cancel');
-  if (balanceCancel) balanceCancel.addEventListener('click', closeBalanceModal);
-  const balanceSave = $('#balance-save');
-  if (balanceSave) balanceSave.addEventListener('click', saveBalance);
   // 弹窗取消
   $('#modal-cancel').addEventListener('click', closeModal);
   $('#modal-save').addEventListener('click', saveRecord);
-  $$('.modal-mask').forEach(m => m.addEventListener('click', () => {
-    // 所有弹窗的 mask 点击都关当前弹窗
-    const addModal = $('#add-modal');
-    const balModal = $('#balance-modal');
-    if (addModal && addModal.classList.contains('active')) closeModal();
-    else if (balModal && balModal.classList.contains('active')) closeBalanceModal();
-  }));
+  $$('.modal-mask').forEach(m => m.addEventListener('click', closeModal));
   // 弹窗内删除按钮
   const modalDel = $('#modal-delete');
   if (modalDel) {
@@ -701,8 +621,6 @@ function bindEvents() {
   // ESC 键关闭弹窗 / 操作菜单
   document.addEventListener('keydown', e => {
     if (e.key !== 'Escape') return;
-    const balModal = $('#balance-modal');
-    if (balModal && balModal.classList.contains('active')) { closeBalanceModal(); return; }
     const modal = $('#add-modal');
     if (modal && modal.classList.contains('active')) { closeModal(); return; }
     const m = $('#action-menu');
@@ -743,20 +661,16 @@ function bindEvents() {
   // 金额回车保存
   $('#amount-input').addEventListener('keydown', e => { if (e.key === 'Enter') saveRecord(); });
 
-  // 首页余额数字 5 连点 → 切换快速导入面板（保护隐私，不常显示）
+  // 首页标题 5 连点 → 切换快速导入面板（保护隐私，不常显示）
   let tapCount = 0, tapTimer = null;
-  const balanceText = document.querySelector('.balance-amount');
-  if (balanceText) {
-    balanceText.style.cursor = 'pointer';
-    balanceText.addEventListener('click', e => {
-      // 5 连点是在余额数字（小范围）上的快速点，不影响余额卡单次点击的"修改期初"弹窗
+  const homeTitle = document.querySelector('.page-home .page-header h1');
+  if (homeTitle) {
+    homeTitle.addEventListener('click', () => {
       tapCount++;
       clearTimeout(tapTimer);
       tapTimer = setTimeout(() => tapCount = 0, 1200);
       if (tapCount >= 5) {
         tapCount = 0;
-        // 阻止冒泡，避免触发余额卡的 click → 打开修改期初弹窗
-        e.stopPropagation();
         const box = $('#paste-import-box');
         if (box) box.style.display = (box.style.display === 'none') ? 'block' : 'none';
         toast(box.style.display === 'block' ? '已打开快速导入' : '已关闭快速导入');
@@ -771,11 +685,9 @@ function bindEvents() {
       try {
         const raw = JSON.parse(txt);
         let incomingRecords = [];
-        let incomingOpening = null;
         if (Array.isArray(raw)) incomingRecords = raw;
         else if (raw && Array.isArray(raw.records)) {
           incomingRecords = raw.records;
-          if (typeof raw.openingBalance === 'number' && !isNaN(raw.openingBalance)) incomingOpening = raw.openingBalance;
         } else if (raw && raw.data && Array.isArray(raw.data)) {
           // records-data.json 种子文件：按日生成收入/支出两条
           raw.data.forEach(monthBlock => {
@@ -794,14 +706,11 @@ function bindEvents() {
               });
             });
           });
-          // 种子导入时期初默认 0，用户自行调整
-          incomingOpening = 0;
         } else throw new Error('不认识的格式');
         if (!incomingRecords.length) throw new Error('空数据');
 
         // 先清空再写入（避免重号）
         saveRecords(incomingRecords);
-        if (incomingOpening !== null) setOpeningBalance(incomingOpening);
         localStorage.removeItem(STATE_KEY); // 重置筛选状态
         location.reload();
       } catch (err) {
@@ -865,7 +774,6 @@ async function init() {
   loadState();
   bindEvents();
   await seedDataIfNeeded();
-  initOpeningBalanceIfNeeded();
   renderAll();
   registerSW();
 }

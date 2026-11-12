@@ -1,5 +1,5 @@
 // Service Worker - 记账 PWA 离线缓存
-const CACHE_NAME = 'costapp-v7';
+const CACHE_NAME = 'costapp-v8';
 const APP_SHELL = [
   './',
   './index.html',
